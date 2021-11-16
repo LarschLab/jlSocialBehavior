@@ -23,7 +23,8 @@ def cohend(d1, d2):
     # calculate the means of the samples
     u1, u2 = np.mean(d1), np.mean(d2)
     # calculate the effect size
-    return (u1 - u2) / s
+    es=(u1 - u2) / s
+    return es, n1, n2, s1, s2, s, u1, u2
 
 def groupCohen(x, cat='wt'):
     dat=x.copy()
@@ -51,30 +52,26 @@ def groupCohen(x, cat='wt'):
         return ret
 
 
-def groupPower(x, cat='wt',alpha=0.05,power=0.8):
-    dat = x.groupby(['animalIndex', cat]).si.mean().unstack().reset_index()
+def groupPower(x, cat='wt',field='si',alpha=0.05,power=0.8):
+    dat = x.groupby(['animalIndex', cat])[field].mean().unstack().reset_index()
     names = ['mnA', 'mnB', 'mnDiff', 'p', 'es', 'P', 'nA', 'nB', 'esReal', 'sPooled', 'sensitivity','s1','s2']
     catLevels = x[cat].unique()
     catLevels.sort()
     # if dat.shape[1] > 2:
-    if len(catLevels) > 1:
+    if len(catLevels) == 2:
         a = dat[catLevels[0]].dropna()
         b = dat[catLevels[1]].dropna()
         p = stats.ttest_ind(a, b, equal_var=False)[1]
 
         effectSize = 1
-        r = len(a) / len(b)
-        nobs1 = len(b)
-        mnDiff = a.mean() - b.mean()
-        effectSizeReal = cohend(a, b)
-        n1, n2 = len(a), len(b)
-        s1, s2 = np.var(a, ddof=1), np.var(b, ddof=1)
-        sd1,sd2 = np.std(a),np.std(b)
-        s = np.sqrt(((n1 - 1) * s1 + (n2 - 1) * s2) / (n1 + n2 - 2))
+        effectSizeReal, n1, n2, s1, s2, s, u1, u2 = cohend(a, b)
+        sd1,sd2=np.std(a),np.std(b)
 
-        P = sms.TTestIndPower().solve_power(effectSize, power=None, alpha=alpha, ratio=r, nobs1=nobs1)
-        # Preal=sms.TTestIndPower().solve_power(esReal, power=None, alpha=0.05, ratio=r,nobs1=nobs1)
-        sens = sms.TTestIndPower().solve_power(effect_size=None, power=power, alpha=alpha, ratio=r, nobs1=nobs1)
+        r = len(a) / len(b)
+        mnDiff = a.mean() - b.mean()
+
+        P = sms.TTestIndPower().solve_power(effectSize, power=None, alpha=alpha, ratio=r, nobs1=n2)
+        sens = sms.TTestIndPower().solve_power(effect_size=None, power=power, alpha=alpha, ratio=r, nobs1=n2)
 
         return pd.Series([a.mean(),
                           b.mean(),
@@ -190,12 +187,12 @@ def powerToSample(df):
     for i,r in df.iterrows():
         text="%s,%s,%s,%s,%s,%s,%s"%(
             str(i),
-            '{:3.3f}'.format(r.mnA),
-            '{:3.3f}'.format(r.s1),
-            '{:3.3f}'.format(r.nA),
-            '{:3.3f}'.format(r.mnB),
-            '{:3.3f}'.format(r.s2),
-            '{:3.3f}'.format(r.nB),
+            '{:3.5f}'.format(r.mnA),
+            '{:3.5f}'.format(r.s1),
+            '{:3.5f}'.format(r.nA),
+            '{:3.5f}'.format(r.mnB),
+            '{:3.5f}'.format(r.s2),
+            '{:3.5f}'.format(r.nB),
         )
         result.append(text)
     return result

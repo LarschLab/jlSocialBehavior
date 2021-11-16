@@ -135,6 +135,17 @@ class Pair(object):
         mov.append([x.ts.positionPol().y() for x in self.animals])
         return np.nanmax(mov)
 
+    def crossCorrStimAn(self):
+
+        an = self.animals[0].ts.speed_smooth()
+        an[np.isnan(an)]=0
+        an = an-np.nanmean(an)
+        st = self.animals[1].ts.speed_smooth()
+        st[np.isnan(st)] = 0
+        st = st-np.nanmean(st)
+        cc = np.correlate(st, an[:-20], mode='valid')
+        return np.nanmin(cc), np.nanargmin(cc), np.nanmax(cc), np.nanargmax(cc)
+
     def get_var_from_all_animals(self, var):
         #this function returns a specified variable from all animals as a matrix.
         #animal number will be second dimension

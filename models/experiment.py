@@ -78,6 +78,7 @@ class ExperimentMeta(object):
         self.recomputeAnimalSize = None
         self.ComputeBouts = None
         self.computeLeadership = None
+        self.ComputeSync = None
         self.stimulusProtocol = None
         self.allowEpisodeSwitch = None
 
@@ -237,8 +238,12 @@ class ExperimentMeta(object):
 
         try:
             self.episodes = expinfo['episodes']
+            maxEpisodes= int(np.floor(((self.numFrames / self.fps) / 60) / self.episodeDur))
+            if maxEpisodes<self.episodes:
+                print('Warning: more episodes specified than what is available. setting to ', maxEpisodes)
+                self.episodes=maxEpisodes
             if self.episodes == -1:
-                self.episodes = int(np.floor(((self.numFrames / self.fps) / 60) / self.episodeDur))
+                self.episodes = maxEpisodes
         except KeyError:
             print('episode number not specified. Using default: all')
             self.episodes = int(np.floor(((self.numFrames / self.fps) / 60) / self.episodeDur))
@@ -287,6 +292,14 @@ class ExperimentMeta(object):
         except KeyError:
             print('computeLeadership not specified. Using default: True')
             self.ComputeBouts = True
+
+        try:
+            self.ComputeSync = expinfo['ComputeSync']
+        except KeyError:
+            print('ComputeSync not specified. Using default: False')
+            self.ComputeSync = False
+
+
 
         try:
             self.allowEpisodeSwitch = expinfo['allowEpisodeSwitch']
@@ -461,18 +474,6 @@ class experiment(object):
             print('Wrong experiment definition argument. Provide TxtPath or pd.Series')
             raise FileNotFoundError
 
-    def getAnimalData(self,anNr=0,anID=0,field='speed',neighbor=False):
-        epi = np.array([self.episodeAll[self.pair[x].rng[0]+10] for x in np.where(self.pair2animal == anNr)[0]])
-        if field=='speed':
-            tmp= np.array([self.pair[x].animals[anID].ts.speed() for x in np.where(self.pair2animal==anNr)[0]])
-        elif field=='relPos':
-            tmp = np.array([self.pair[x].animals[anID].ts.position_relative_to_neighbor_rot() for x in np.where(self.pair2animal == anNr)[0]])
-        elif field=='dStimSize':
-            tmp= np.array([self.pair[x].animals[anID].ts.dStimSize() for x in np.where(self.pair2animal==anNr)[0]])
-
-        return tmp,epi
-
-
     def linkFullAnimals(self):
         for i in range(self.expInfo.numPairs+1):# adding extra 'animal' which is stimulus!
             Animal(ID=i).joinExperiment(self)
@@ -598,6 +599,14 @@ class experiment(object):
         else:
             boutDur = 0
 
+        if self.expInfo.ComputeSync == 1:
+            print('Synchronization ... ', end='')
+            sync = np.array([x.crossCorrStimAn() for x in self.pair])
+            sync_amp=[x[0] for x in sync]
+            sync_t=[x[1] for x in sync]
+        else:
+            sync_amp=0
+            sync_t=0
 
         print(' done.')
 
@@ -634,6 +643,8 @@ class experiment(object):
         df['thigmoIndex'] = thigmoIndex
         df['boutDur'] = boutDur
         df['leadershipIndex'] = leadershipIndex
+        df['sync_amp'] = sync_amp
+        df['sync_t'] = sync_t
 
         txtFn = os.path.split(self.expInfo.trajectoryPath)[1]
         csvFileOut = os.path.join(self.expInfo.processingDir, txtFn[:-4] + '_siSummary_epi' + str(self.expInfo.episodeDur) + '.csv')
