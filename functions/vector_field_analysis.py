@@ -415,7 +415,7 @@ class VectorFieldAnalysis:
         self.read_experiment_set()
         if self.calc_thigmo_thresh:
 
-            self.exclude_anids = get_thigmo_thresh(self.df, thresh=self.thigmothresh)
+            self.exclude_anids, exan_dict = get_thigmo_thresh(self.df, thresh=self.thigmothresh)
 
         if self.default_limit is not None:
             self.limit = self.default_limit
@@ -518,6 +518,7 @@ class VectorFieldAnalysis:
         info['expTime'] = expTime
         info['nShiftRuns'] = self.nShiftRuns
         info['filteredMaps'] = self.expfile
+        #info['readLim'] = 300
 
         csv_file = os.path.join(self.base, 'processingSettings.csv')
         info.to_csv(csv_file, encoding='utf-8')
@@ -556,9 +557,9 @@ class VectorFieldAnalysis:
 
         print('df shape', df.shape)
 
-        self.dates_ids = np.unique([(date.split(' ')[0], anid) for date, anid in zip(df['time'].values, df['animalID'].values)],
+        self.dates_ids = np.unique([(set_id, anid) for set_id, anid in zip(df['animalSet'].values, df['animalID'].values)],
                               axis=0)
-        self.n_animals_sess = [self.dates_ids[np.where(self.dates_ids[:, 0] == date)[0], 1].astype(int).max() + 1 for date in
+        self.n_animals_sess = [self.dates_ids[np.where(self.dates_ids[:, 0] == set_id)[0], 1].astype(int).max() + 1 for set_id in
                           np.unique(self.dates_ids[:, 0])]
 
         self.limit = info['episodes'].unique()[0] * info['epiDur'].unique()[0] * self.fps * 60
@@ -667,7 +668,7 @@ class VectorFieldAnalysis:
 
                 ts = self.exp_set.experiments[j].pair_f[i].animals[0].ts
 
-                print(ts.yflip, 'ts yflip attribute')
+                #print(ts.yflip, 'ts yflip attribute')
                 ts.yflip = self.yflip
                 ts.animal.neighbor.ts.yflip = self.yflip
                 print(ts.yflip, 'ts yflip attribute')
@@ -783,7 +784,7 @@ class VectorFieldAnalysis:
 
         return
 
-    def extract_nmaps(self):
+    def extract_nmaps(self, tag=''):
 
         """
         Extracting FILTERED neighborhood maps from each individual animal for all conditions
@@ -824,7 +825,7 @@ class VectorFieldAnalysis:
                     else:
                         self.neighbormaps_bl = nmap
 
-        self.generate_mapdict()
+        self.generate_mapdict(tag=tag)
         return
 
     def generate_mapdict(self, tag=''):
@@ -868,7 +869,7 @@ class VectorFieldAnalysis:
                 grkey_bl, grkey_cont = '_'.join([group, '10k20f']), '_'.join([group, '07k01f'])
                 for anid in anids:
 
-                    if anid in self.exclude_anids:
+                    if anid in list(self.exclude_anids):
 
                         nex += 1
                         nan += 1
@@ -1311,7 +1312,7 @@ def get_thigmo_thresh(
     plt.axvline(np.nanmean(thigmos), linestyle=':', color='red')
 
     plt.savefig('thighmohist.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()
 
     exan = [i for i in range(1, n_animals + 1) if not
                 np.nanmean(df[df['animalIndex'] == i]['thigmoIndex'].values) < thresh]
@@ -1342,13 +1343,13 @@ def plot_si(
         exclude_groups=[]
 
 ):
+    if not len(exan) == 0:
+        exbool = np.invert(
+            np.any(np.concatenate([[exan[i] == df.animalIndex.values] for i in range(len(exan))], axis=0).T, axis=1))
+        df = df[exbool]
+        for exgroup in exclude_groups:
 
-    exbool = np.invert(
-        np.any(np.concatenate([[exan[i] == df.animalIndex.values] for i in range(len(exan))], axis=0).T, axis=1))
-    df = df[exbool]
-    for exgroup in exclude_groups:
-
-        df = df[np.invert(df.group == exgroup)]
+            df = df[np.invert(df.group == exgroup)]
 
     if groups == []:
 
@@ -1384,14 +1385,14 @@ if __name__ == "__main__":
     ops = {
 
         'base': 'J:/_Projects/J-sq',
-        'expset_name': 'jjAblationsBilateral',
+        'expset_name': 'jjAblationsNeuropil',
         'stim_protocol': 'boutVsSmooth_grateloom',
         'tag': '',
         'swap_stim': False,
         'shift': False,
         'yflip': True,
         'default_limit': None, # CARFUL HERE, No False!!!
-        'load_expset': True,
+        'load_expset': False,
         'cam_height': [105, 180],
         'fps': 30,
 
@@ -1401,7 +1402,7 @@ if __name__ == "__main__":
         'unique_episodes': ['07k01f', '10k20f'],
         'groupsets': [],
         'sortlogics': ['groupwise'],
-        'ctr': 'ctr',
+        'ctr': 'CtrE',
 
         'nmap_res': (30, 30),
         'dist_filter': (0, 30),
@@ -1412,8 +1413,8 @@ if __name__ == "__main__":
         'vmap_res': (30, 30, 30, 30),
         'revtag': 'L',
         'abs_dist': True,
-         'calc_thigmo_thresh': True,
-         'thigmothresh': 35.,
+        'calc_thigmo_thresh': False,
+        'thigmothresh': 35.,
 
         # experiment set parameters
         'epiDur': 5,
@@ -1423,7 +1424,7 @@ if __name__ == "__main__":
         'minShift': 60,
         'episodePLcode': 0,
         'recomputeAnimalSize': 0,
-        'SaveNeighborhoodMaps': 0,
+        'SaveNeighborhoodMaps': 1,
         'computeLeadership': 0,
         'computeBouts': 0,
         'nShiftRuns': 3,
@@ -1431,17 +1432,20 @@ if __name__ == "__main__":
 
     }
 
-    abl_b = VectorFieldAnalysis(**ops)
+    #abl_b = VectorFieldAnalysis(**ops)
     #abl_b.process_dataset()
-    abl_b.process_nmaps()
-    ops['expset_name'] = 'jjAblations'
-    ops['stim_protocol'] = 'boutVsSmooth'
+    #abl_b.process_nmaps()
+    ops['expset_name'] = 'jjAblationsFinal'
+    ops['edges_pos'] = (-60, 60)
+    #ops['stim_protocol'] = 'boutVsSmooth'
     abl_b = VectorFieldAnalysis(**ops)
-    #abl_b.process_dataset()
+    abl_b.load_expset = True
+    abl_b.process_dataset()
     abl_b.process_nmaps()
-    ops['expset_name'] = 'jjAblationsGratingLoom'
-    ops['stim_protocol'] = 'boutVsSmooth_grateloom'
-    abl_b = VectorFieldAnalysis(**ops)
+
+    #ops['expset_name'] = 'jjAblationsGratingLoom'
+    #ops['stim_protocol'] = 'boutVsSmooth_grateloom'
+    #abl_b = VectorFieldAnalysis(**ops)
     #abl_b.process_dataset()
-    abl_b.process_nmaps()
+    #abl_b.process_nmaps()
 
